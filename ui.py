@@ -55,11 +55,11 @@ def get_speakers():
                 except Exception as e:
                     print("Malformed config json in "+folder)
                 for name, i in cfg_json["spk"].items():
-                    cur_speaker["name"] = f'{name} ({folder})'
+                    cur_speaker["name"] = f'{name}/{folder}'
                     cur_speaker["id"] = i
                     if not name.startswith('.'):
                         speakers.append(copy.copy(cur_speaker))
-
+        print(f"== {len(speakers)} SPEAKERS:", speakers)
         return sorted(speakers, key=lambda x: x["name"].lower())
 
 
@@ -79,6 +79,7 @@ class InferenceGui(tk.Tk):
         self.speakers = get_speakers()
         self.speaker_list = [x["name"] for x in self.speakers]
         self.create_widgets()
+        self.update_file_list()
 
     def create_widgets(self):
         ttk.Label(self, text="Speaker:").grid(column=0, row=0)
@@ -86,18 +87,24 @@ class InferenceGui(tk.Tk):
         self.speaker_box = ttk.Combobox(
             self, textvariable=self.speaker_var, values=self.speaker_list)
         self.speaker_box.grid(column=1, row=0)
+        if self.speaker_list:
+          self.speaker_box.insert(0, self.speaker_list[0])
 
         ttk.Label(self, text="Transpose (int):").grid(column=0, row=1)
         self.trans_tx = ttk.Entry(self)
         self.trans_tx.grid(column=1, row=1)
+        self.trans_tx.insert(0, '0')
 
         ttk.Label(self, text="Clustering Ratio (float):").grid(column=0, row=2)
         self.cluster_ratio_tx = ttk.Entry(self)
         self.cluster_ratio_tx.grid(column=1, row=2)
+        self.cluster_ratio_tx.insert(0, '0')
 
         ttk.Label(self, text="Noise Scale (float):").grid(column=0, row=3)
         self.noise_scale_tx = ttk.Entry(self)
         self.noise_scale_tx.grid(column=1, row=3)
+        self.noise_scale_tx.insert(0, '0.4')
+        
 
         self.auto_pitch_var = tk.BooleanVar()
         self.auto_pitch_ck = ttk.Checkbutton(
@@ -112,14 +119,25 @@ class InferenceGui(tk.Tk):
             self, text="Delete all audio files", command=self.clean)
         self.clean_btn.grid(column=1, row=5)
 
+        ttk.Label(self, text="Input Files:").grid(column=0, row=6, sticky="W")
+        self.file_listbox = tk.Listbox(self, width=50, height=10)
+        self.file_listbox.grid(column=0, row=7, columnspan=2)
+
     def _get_input_filepaths(self):
         return [f for f in glob.glob('./_svc_in/**/*.*', recursive=True)
                 if f not in existing_files and any(f.endswith(ex) for ex in ['.wav', '.flac', '.mp3', '.ogg', '.opus'])]
 
+    def update_file_list(self):
+        self.file_listbox.delete(0, tk.END)
+        input_files = self._get_input_filepaths()
+        for filepath in input_files:
+            filename = os.path.basename(filepath)
+            self.file_listbox.insert(tk.END, filename)
+
     def convert(self):
-        trans = int(self.trans_tx.value)
-        speaker = next(x for x in self.speakers if x["name"] ==
-                       self.speaker_box.value)
+        trans = int(self.trans_tx.get() or '0')
+        print("CURRENT SPEAKER:", self.speaker_box.get())
+        speaker = next(x for x in self.speakers if x["name"] == self.speaker_box.get())
         spkpth2 = os.path.join(os.getcwd(), speaker["model_path"])
         print(spkpth2)
         print(os.path.exists(spkpth2))
@@ -158,24 +176,22 @@ class InferenceGui(tk.Tk):
                     raw_path.seek(0)
                     _cluster_ratio = 0.0
                     if speaker["cluster_path"] != "":
-                        _cluster_ratio = float(self.cluster_ratio_tx.value)
+                        _cluster_ratio = float(self.cluster_ratio_tx.get() or '0')
                     out_audio, out_sr = svc_model.infer(
-                        speaker["name"], trans, raw_path,
+                        speaker["name"].split('/')[0], trans, raw_path,
                         cluster_infer_ratio=_cluster_ratio,
-                        auto_predict_f0=bool(self.auto_pitch_ck.value),
-                        noice_scale=float(self.noise_scale_tx.value))
+                        auto_predict_f0=bool(self.auto_pitch_var.get()),
+                        noice_scale=float(self.noise_scale_tx.get() or '0.4'))
                     _audio = out_audio.cpu().numpy()
                     pad_len = int(svc_model.target_sample * 0.5)
                     _audio = _audio[pad_len:-pad_len]
                 audio.extend(list(infer_tool.pad_array(_audio, length)))
-
+            model_output_name = speaker["name"].split('/')[-1]
             res_path = os.path.join('./_svc_out/',
                                     f'{wav_name}_{trans}_key_'
-                                    f'{speaker["name"]}.{wav_format}')
+                                    f'{model_output_name}.{wav_format}')
             soundfile.write(res_path, audio, svc_model.target_sample,
                             format=wav_format)
-            display(Audio(res_path, autoplay=True))  # display audio file
-        pass
 
     def clean(self):
         input_filepaths = [f for f in glob.glob('./_svc_out/**/*.*', recursive=True)
