@@ -30,6 +30,7 @@ pyqt5 = "^5.15.9"
 huggingface-hub = "^0.13.4"
 datasets = "^2.11.0"
 tk = "^0.1.0"
+autopep8 = "^2.0.2"
 
 
 [build-system]
