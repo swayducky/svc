@@ -6,9 +6,10 @@ import json
 import copy
 import logging
 import io
-from ipywidgets import widgets
 from pathlib import Path
-from IPython.display import Audio, display
+import tkinter as tk
+from tkinter import ttk
+from tkinter import filedialog
 
 import torch
 from inference import infer_tool
@@ -53,7 +54,7 @@ def get_speakers():
         except Exception as e:
           print("Malformed config json in "+folder)
         for name, i in cfg_json["spk"].items():
-          cur_speaker["name"] = name
+          cur_speaker["name"] = f'{name} ({folder})'
           cur_speaker["id"] = i
           if not name.startswith('.'):
             speakers.append(copy.copy(cur_speaker))
@@ -66,39 +67,47 @@ existing_files = []
 slice_db = -40
 wav_format = 'wav'
 
-class InferenceGui():
+class InferenceGui(tk.Tk):
   def __init__(self):
+    super().__init__()
+    self.title("Inference GUI")
+    self.geometry("600x300")
+    
     self.speakers = get_speakers()
     self.speaker_list = [x["name"] for x in self.speakers]
-    self.speaker_box = widgets.Dropdown(
-        options = self.speaker_list
-    )
-    display(self.speaker_box)
+    self.create_widgets()
 
-    def convert_cb(btn):
-      self.convert()
-    def clean_cb(btn):
-      self.clean()
+  def create_widgets(self):
+    ttk.Label(self, text="Speaker:").grid(column=0, row=0)
+    self.speaker_var = tk.StringVar()
+    self.speaker_box = ttk.Combobox(self, textvariable=self.speaker_var, values=self.speaker_list)
+    self.speaker_box.grid(column=1, row=0)
 
-    self.convert_btn = widgets.Button(description="Convert")
-    self.convert_btn.on_click(convert_cb)
-    self.clean_btn = widgets.Button(description="Delete all audio files")
-    self.clean_btn.on_click(clean_cb)
+    ttk.Label(self, text="Transpose (int):").grid(column=0, row=1)
+    self.trans_tx = ttk.Entry(self)
+    self.trans_tx.grid(column=1, row=1)
 
-    self.trans_tx = widgets.IntText(value=12, description='Transpose')
-    self.cluster_ratio_tx = widgets.FloatText(value=0.0, 
-      description='Clustering Ratio')
-    self.noise_scale_tx = widgets.FloatText(value=0.4, 
-      description='Noise Scale')
-    self.auto_pitch_ck = widgets.Checkbox(value=False, description=
-      'Auto pitch f0 (do not use for singing)')
+    ttk.Label(self, text="Clustering Ratio (float):").grid(column=0, row=2)
+    self.cluster_ratio_tx = ttk.Entry(self)
+    self.cluster_ratio_tx.grid(column=1, row=2)
 
-    display(self.trans_tx)
-    display(self.cluster_ratio_tx)
-    display(self.noise_scale_tx)
-    display(self.auto_pitch_ck)
-    display(self.convert_btn)
-    display(self.clean_btn)
+    ttk.Label(self, text="Noise Scale (float):").grid(column=0, row=3)
+    self.noise_scale_tx = ttk.Entry(self)
+    self.noise_scale_tx.grid(column=1, row=3)
+
+    self.auto_pitch_var = tk.BooleanVar()
+    self.auto_pitch_ck = ttk.Checkbutton(self, text="Auto pitch f0 (do not use for singing)", variable=self.auto_pitch_var)
+    self.auto_pitch_ck.grid(column=0, row=4, columnspan=2)
+
+    self.convert_btn = ttk.Button(self, text="Convert", command=self.convert)
+    self.convert_btn.grid(column=0, row=5)
+
+    self.clean_btn = ttk.Button(self, text="Delete all audio files", command=self.clean)
+    self.clean_btn.grid(column=1, row=5)
+  
+  def _get_input_filepaths(self):
+    return [f for f in glob.glob('./_svc_in/**/*.*', recursive=True)
+     if f not in existing_files and any(f.endswith(ex) for ex in ['.wav','.flac','.mp3','.ogg','.opus'])]
 
   def convert(self):
     trans = int(self.trans_tx.value)
@@ -111,9 +120,7 @@ class InferenceGui():
     svc_model = Svc(speaker["model_path"], speaker["cfg_path"], 
       cluster_model_path=speaker["cluster_path"])
     
-    input_filepaths = [f for f in glob.glob('./data/**/*.*', recursive=True)
-     if f not in existing_files and 
-     any(f.endswith(ex) for ex in ['.wav','.flac','.mp3','.ogg','.opus'])]
+    input_filepaths = self._get_input_filepaths()
     for name in input_filepaths:
       print("Converting "+os.path.split(name)[-1])
       infer_tool.format_wav(name)
@@ -155,7 +162,7 @@ class InferenceGui():
               _audio = _audio[pad_len:-pad_len]
           audio.extend(list(infer_tool.pad_array(_audio, length)))
           
-      res_path = os.path.join('./output/',
+      res_path = os.path.join('./_svc_out/',
           f'{wav_name}_{trans}_key_'
           f'{speaker["name"]}.{wav_format}')
       soundfile.write(res_path, audio, svc_model.target_sample,
@@ -164,10 +171,12 @@ class InferenceGui():
     pass
 
   def clean(self):
-     input_filepaths = [f for f in glob.glob('./output/**/*.*', recursive=True)
+     input_filepaths = [f for f in glob.glob('./_svc_out/**/*.*', recursive=True)
      if f not in existing_files and 
      any(f.endswith(ex) for ex in ['.wav','.flac','.mp3','.ogg','.opus'])]
      for f in input_filepaths:
        os.remove(f)
 
-inference_gui = InferenceGui()
+if __name__ == "__main__":
+  app = InferenceGui()
+  app.mainloop()
