@@ -23,44 +23,46 @@ MODELS_DIR = "./models"
 
 def get_speakers():
     speakers = []
-    for _, dirs, _ in os.walk(MODELS_DIR):
-        for folder in dirs:
-            print("== folder", folder)
-            cur_speaker = {}
-            # Look for G_****.pth
-            g = glob.glob(os.path.join(MODELS_DIR, folder, 'G_*.pth'))
-            if not len(g):
-                print("Skipping "+folder+", no G_*.pth")
-                continue
-            cur_speaker["model_path"] = g[0]
-            cur_speaker["model_folder"] = folder
+    for model_dir in ['./models', './models/so-vits-svc-4.0']:
+        for _, dirs, _ in os.walk(model_dir):
+            print("== model_dir", model_dir)
+            for folder in dirs:
+                print("== folder", folder)
+                cur_speaker = {}
+                # Look for G_****.pth
+                g = glob.glob(os.path.join(model_dir, folder, 'G_*.pth'))
+                if not len(g):
+                    print("Skipping "+folder+", no G_*.pth")
+                    continue
+                cur_speaker["model_path"] = g[0]
+                cur_speaker["model_folder"] = folder
 
-            # Look for *.pt (clustering model)
-            clst = glob.glob(os.path.join(MODELS_DIR, folder, '*.pt'))
-            if not len(clst):
-                print("Note: No clustering model found for "+folder)
-                cur_speaker["cluster_path"] = ""
-            else:
-                cur_speaker["cluster_path"] = clst[0]
+                # Look for *.pt (clustering model)
+                clst = glob.glob(os.path.join(model_dir, folder, '*.pt'))
+                if not len(clst):
+                    print("Note: No clustering model found for "+folder)
+                    cur_speaker["cluster_path"] = ""
+                else:
+                    cur_speaker["cluster_path"] = clst[0]
 
-            # Look for config.json
-            cfg = glob.glob(os.path.join(MODELS_DIR, folder, '*.json'))
-            if not len(cfg):
-                print("Skipping "+folder+", no config json")
-                continue
-            cur_speaker["cfg_path"] = cfg[0]
-            with open(cur_speaker["cfg_path"]) as f:
-                try:
-                    cfg_json = json.loads(f.read())
-                except Exception as e:
-                    print("Malformed config json in "+folder)
-                for name, i in cfg_json["spk"].items():
-                    cur_speaker["name"] = f'{name}/{folder}'
-                    cur_speaker["id"] = i
-                    if not name.startswith('.'):
-                        speakers.append(copy.copy(cur_speaker))
-        print(f"== {len(speakers)} SPEAKERS:", speakers)
-        return sorted(speakers, key=lambda x: x["name"].lower())
+                # Look for config.json
+                cfg = glob.glob(os.path.join(model_dir, folder, '*.json'))
+                if not len(cfg):
+                    print("Skipping "+folder+", no config json")
+                    continue
+                cur_speaker["cfg_path"] = cfg[0]
+                with open(cur_speaker["cfg_path"]) as f:
+                    try:
+                        cfg_json = json.loads(f.read())
+                    except Exception as e:
+                        print("Malformed config json in "+folder)
+                    for name, i in cfg_json["spk"].items():
+                        cur_speaker["name"] = f'{name}/{folder}'
+                        cur_speaker["id"] = i
+                        if not name.startswith('.'):
+                            speakers.append(copy.copy(cur_speaker))
+            print(f"== {len(speakers)} SPEAKERS:", speakers)
+    return sorted(speakers, key=lambda x: x["name"].lower())
 
 
 logging.getLogger('numba').setLevel(logging.WARNING)
@@ -88,7 +90,7 @@ class InferenceGui(tk.Tk):
             self, textvariable=self.speaker_var, values=self.speaker_list)
         self.speaker_box.grid(column=1, row=0)
         if self.speaker_list:
-          self.speaker_box.insert(0, self.speaker_list[0])
+            self.speaker_box.insert(0, self.speaker_list[0])
 
         ttk.Label(self, text="Transpose (int):").grid(column=0, row=1)
         self.trans_tx = ttk.Entry(self)
@@ -104,7 +106,6 @@ class InferenceGui(tk.Tk):
         self.noise_scale_tx = ttk.Entry(self)
         self.noise_scale_tx.grid(column=1, row=3)
         self.noise_scale_tx.insert(0, '0.4')
-        
 
         self.auto_pitch_var = tk.BooleanVar()
         self.auto_pitch_ck = ttk.Checkbutton(
@@ -137,7 +138,8 @@ class InferenceGui(tk.Tk):
     def convert(self):
         trans = int(self.trans_tx.get() or '0')
         print("CURRENT SPEAKER:", self.speaker_box.get())
-        speaker = next(x for x in self.speakers if x["name"] == self.speaker_box.get())
+        speaker = next(
+            x for x in self.speakers if x["name"] == self.speaker_box.get())
         spkpth2 = os.path.join(os.getcwd(), speaker["model_path"])
         print(spkpth2)
         print(os.path.exists(spkpth2))
@@ -176,7 +178,8 @@ class InferenceGui(tk.Tk):
                     raw_path.seek(0)
                     _cluster_ratio = 0.0
                     if speaker["cluster_path"] != "":
-                        _cluster_ratio = float(self.cluster_ratio_tx.get() or '0')
+                        _cluster_ratio = float(
+                            self.cluster_ratio_tx.get() or '0')
                     out_audio, out_sr = svc_model.infer(
                         speaker["name"].split('/')[0], trans, raw_path,
                         cluster_infer_ratio=_cluster_ratio,
@@ -192,6 +195,7 @@ class InferenceGui(tk.Tk):
                                     f'{model_output_name}.{wav_format}')
             soundfile.write(res_path, audio, svc_model.target_sample,
                             format=wav_format)
+        print("==== Done! ====")
 
     def clean(self):
         input_filepaths = [f for f in glob.glob('./_svc_out/**/*.*', recursive=True)
