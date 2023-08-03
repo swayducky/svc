@@ -125,7 +125,7 @@ class InferenceGui(tk.Tk):
         self.file_listbox.grid(column=0, row=7, columnspan=2)
 
     def _get_input_filepaths(self):
-        return [f for f in glob.glob('./_svc_in/**/*.*', recursive=True)
+        return [f for f in glob.glob('./_in/**/*.*', recursive=True)
                 if f not in existing_files and any(f.endswith(ex) for ex in ['.wav', '.flac', '.mp3', '.ogg', '.opus'])]
 
     def update_file_list(self):
@@ -190,7 +190,7 @@ class InferenceGui(tk.Tk):
                     _audio = _audio[pad_len:-pad_len]
                 audio.extend(list(infer_tool.pad_array(_audio, length)))
             model_output_name = speaker["name"].split('/')[-1]
-            res_path = os.path.join('./_svc_out/',
+            res_path = os.path.join('./_out_svc/',
                                     f'{wav_name}_{trans}_key_'
                                     f'{model_output_name}.{wav_format}')
             soundfile.write(res_path, audio, svc_model.target_sample,
@@ -198,7 +198,7 @@ class InferenceGui(tk.Tk):
         print("==== Done! ====")
 
     def clean(self):
-        input_filepaths = [f for f in glob.glob('./_svc_out/**/*.*', recursive=True)
+        input_filepaths = [f for f in glob.glob('./_out_svc/**/*.*', recursive=True)
                            if f not in existing_files and
                            any(f.endswith(ex) for ex in ['.wav', '.flac', '.mp3', '.ogg', '.opus'])]
         for f in input_filepaths:
